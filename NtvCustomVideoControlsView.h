@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
-#import "NtvVideoSlider.h"
+#import "VideoSlider.h"
 
 @import NativoSDK;
 
@@ -25,7 +25,7 @@
 @property (weak, nonatomic) IBOutlet UIButton *playPauseBtn;
 @property (weak, nonatomic) IBOutlet UIButton *collapseBtn;
 @property (nonatomic) IBInspectable UIColor *learnMoreBorderColor;
-@property (weak, nonatomic) IBOutlet NtvVideoSlider *seekSlider;
+@property (weak, nonatomic) IBOutlet VideoSlider *seekSlider;
 @property (weak, nonatomic) IBOutlet UIView *botFaderView;
 @property (weak, nonatomic) IBOutlet UIView *topFaderView;
 @property (weak, nonatomic) IBOutlet UILabel *elapsedTimeLabel;

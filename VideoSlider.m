@@ -2,17 +2,17 @@
 //  NtvVideoSlider.m
 //  NativoFullScreenVideoSkin
 //
-//  Copyright (c) 2019 Nativo, Inc. All rights reserved.
+//  Copyright (c) 2020 Nativo, Inc. All rights reserved.
 //
 
-#import "NtvVideoSlider.h"
+#import "VideoSlider.h"
 
-@interface NtvVideoSlider ()
+@interface VideoSlider ()
 @property (nonatomic) UIProgressView *bufferProgressView;
 @property (nonatomic) CGRect trackFrame;
 @end
 
-@implementation NtvVideoSlider
+@implementation VideoSlider
 
 - (instancetype)init {
     self = [super init];
@@ -34,7 +34,7 @@
     self.bufferProgressView.progress = 0.88f;
     self.bufferProgressView.progressTintColor = [[UIColor lightGrayColor] colorWithAlphaComponent:0.75f];
     self.bufferProgressView.trackTintColor = [[UIColor darkGrayColor] colorWithAlphaComponent:0.5f];
-    [self addSubview:self.bufferProgressView];
+    [self insertSubview:self.bufferProgressView atIndex:0];
     
     // Edit thumb and track
     UIImage *thumb = [UIImage imageNamed:@"sliderThumb" inBundle:nil compatibleWithTraitCollection:nil];
@@ -52,7 +52,7 @@
 
 - (void)setBufferProgress:(float)progress {
     _bufferProgress = progress;
-    self.bufferProgressView.progress = progress;
+    [self.bufferProgressView setProgress:progress animated:YES];
 }
 
 - (CGRect)thumbRectForBounds:(CGRect)bounds trackRect:(CGRect)rect value:(float)value {
@@ -70,10 +70,15 @@
         if (!CGRectIsNull(newFrame) && !CGRectEqualToRect(newFrame, self.trackFrame)) {
             newFrame.size.height = 6.0f;
             self.trackFrame = newFrame;
-            self.bufferProgressView.frame = CGRectOffset(newFrame, 0, 2);
-            
+
             // Set progress view to desired height using transformScale
-            self.bufferProgressView.transform = CGAffineTransformScale(self.bufferProgressView.transform, 1.0f, 3.0f);
+            if (@available(iOS 14, *)) {
+                self.bufferProgressView.frame = CGRectOffset(newFrame, 0, 1);
+                self.bufferProgressView.transform = CGAffineTransformScale(self.bufferProgressView.transform, 1.0f, 1.7f);
+            } else {
+                self.bufferProgressView.frame = CGRectOffset(newFrame, 0, 2);
+                self.bufferProgressView.transform = CGAffineTransformScale(self.bufferProgressView.transform, 1.0f, 3.0f);
+            }
         }
     } @catch (NSException *exception) {
         NSLog(@"NativoSDK - Exception setting frame on progress bar: %@", exception);

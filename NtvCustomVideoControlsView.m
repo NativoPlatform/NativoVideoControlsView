@@ -2,13 +2,12 @@
 //  NtvCustomVideoPlayerControls.m
 //  NativoFullScreenVideoSkin
 //
-//  Copyright (c) 2019 Nativo, Inc. All rights reserved.
+//  Copyright (c) 2020 Nativo, Inc. All rights reserved.
 //
 
 #import "NtvCustomVideoControlsView.h"
 #import "AppUtils.h"
 #import "KVOController.h"
-#import "Masonry.h"
 
 #define SHOW_CONTROLS_DURATION 4
 
@@ -90,42 +89,43 @@
 }
 
 - (void)willLoadNewPlayerItem {
-    [AppUtils setLoadingState:YES onView:self.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
+    [self syncPlayState];
 }
 
 - (void)didLoadNewPlayerItem:(AVPlayerItem *)playerItem {
-    
-    [self unobservePreviousPlayer];
-    
-    // Reset UI
-    if (!CMTIME_IS_VALID(playerItem.currentTime) || CMTimeCompare(playerItem.currentTime, kCMTimeZero) == 0 ) {
-        if (!playerItem.playbackLikelyToKeepUp) {
-            [AppUtils setLoadingState:YES onView:self.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
+    @try {
+        // Reset UI
+        self.isVideoFinished = NO;
+        if (!CMTIME_IS_VALID(playerItem.currentTime) || CMTimeCompare(playerItem.currentTime, kCMTimeZero) == 0 ) {
+            [self updateTimeLabel:0];
+            self.seekSlider.value = 0;
+            self.seekSlider.bufferProgress = 0;
+        } else {
+            [self observeTime:playerItem.currentTime];
         }
-        [self updateTimeLabel:0];
-        self.seekSlider.value = 0;
-        self.seekSlider.bufferProgress = 0;
-    } else {
-        [self observeTime:playerItem.currentTime];
+        [self syncPlayState];
+        
+        // Reset time label
+        Float64 duration = CMTimeGetSeconds(playerItem.duration);
+        if (!isnan(duration) && duration > 0) {
+            self.remainingTimeLabel.text = [NSString stringWithFormat:@"%02d:%02d", (((int)duration)/60) % 60, ((int)duration) % 60];
+        } else {
+            self.remainingTimeLabel.text = @"--";
+            self.elapsedTimeLabel.text = @"--";
+        }
+        
+        // Observer player state
+        [self observePlayerState:playerItem];
+        
+    } @catch (NSException *exception) {
+        NSLog(@"%@", exception);
     }
-    [self syncPlayState];
-    
-    
-    // Reset time label
-    Float64 duration = CMTimeGetSeconds(playerItem.duration);
-    if (!isnan(duration) && duration > 0) {
-        self.remainingTimeLabel.text = [NSString stringWithFormat:@"%02d:%02d", (((int)duration)/60) % 60, ((int)duration) % 60];
-    } else {
-        self.remainingTimeLabel.text = @"--";
-        self.elapsedTimeLabel.text = @"--";
-    }
-    
-    // Observer player state
-    [self observePlayerState:playerItem];
-    
 }
 
 - (void)unobservePreviousPlayer {
+    if (self.player && self.timeObserver) {
+        [self.player removeTimeObserver:self.timeObserver];
+    }
     [self.KVOController unobserveAll];
     [[NSNotificationCenter defaultCenter] removeObserver:self.stalledToken];
 }
@@ -133,67 +133,74 @@
 - (void)observePlayerState:(AVPlayerItem *)playerItem {
     
     __weak NtvCustomVideoControlsView *weakSelf = self;
-    AVPlayer *player = self.player;
     UILabel *remainingTimeLabel = self.remainingTimeLabel;
     __block float playerRateBeforeSeek = self.playerRateBeforeSeek;
     
     [self.KVOController observe:playerItem keyPath:@"status" options:NSKeyValueObservingOptionInitial | NSKeyValueObservingOptionOld | NSKeyValueObservingOptionNew block:^(id  _Nullable observer, id  _Nonnull object, NSDictionary<NSString *,id> * _Nonnull change) {
-
-        AVPlayerStatus newStatus = [[change objectForKey:NSKeyValueChangeNewKey] integerValue];
-        AVPlayerStatus oldStatus = [[change objectForKey:NSKeyValueChangeOldKey] integerValue];
-        
-        if (newStatus != oldStatus)
-        {
-            switch (newStatus) {
-                case AVPlayerStatusReadyToPlay: {
-                    [AppUtils setLoadingState:NO onView:self.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
-                    Float64 duration = CMTimeGetSeconds(playerItem.duration);
-                    if (!isnan(duration) && duration > 0) {
-                        remainingTimeLabel.text = [NSString stringWithFormat:@"%02d:%02d", (((int)duration)/60) % 60, ((int)duration) % 60];
+        @try {
+            AVPlayerStatus newStatus = [[change objectForKey:NSKeyValueChangeNewKey] integerValue];
+            AVPlayerStatus oldStatus = [[change objectForKey:NSKeyValueChangeOldKey] integerValue];
+            
+            if (newStatus != oldStatus)
+            {
+                switch (newStatus) {
+                    case AVPlayerStatusReadyToPlay: {
+                        Float64 duration = CMTimeGetSeconds(playerItem.duration);
+                        if (!isnan(duration) && duration > 0) {
+                            remainingTimeLabel.text = [NSString stringWithFormat:@"%02d:%02d", (((int)duration)/60) % 60, ((int)duration) % 60];
+                        }
+                        break;
                     }
-                    break;
+                    default:
+                        break;
                 }
-                default:
-                    break;
             }
+        } @catch (NSException *exception) {
+            NSLog(@"%@", exception);
         }
     }];
     
     // Observe buffer rate
-    __weak NtvVideoSlider *videoSlider  = self.seekSlider;
+    __weak VideoSlider *videoSlider  = self.seekSlider;
     [self.KVOController observe:playerItem keyPath:@"loadedTimeRanges" options:NSKeyValueObservingOptionOld block:^(id  _Nullable observer, id  _Nonnull object, NSDictionary<NSString *,id> * _Nonnull change) {
-        Float64 maxBufferTime = 0;
-        for (NSValue *val in playerItem.loadedTimeRanges) {
-            CMTimeRange timeRange = [val CMTimeRangeValue];
-            Float64 start = CMTimeGetSeconds(timeRange.start);
-            Float64 duration = CMTimeGetSeconds(timeRange.duration);
-            Float64 bufferTime = start + duration;
-            if (bufferTime > maxBufferTime) {
-                maxBufferTime = bufferTime;
+        @try {
+            Float64 maxBufferTime = 0;
+            for (NSValue *val in playerItem.loadedTimeRanges) {
+                CMTimeRange timeRange = [val CMTimeRangeValue];
+                Float64 start = CMTimeGetSeconds(timeRange.start);
+                Float64 duration = CMTimeGetSeconds(timeRange.duration);
+                Float64 bufferTime = start + duration;
+                if (bufferTime > maxBufferTime) {
+                    maxBufferTime = bufferTime;
+                }
             }
-            //NSLog(@"Buffer Start: %f, Buffer Duration: %f, Buffer Ranges: %i", start, duration, playerItem.loadedTimeRanges.count);
+            videoSlider.bufferProgress = maxBufferTime / CMTimeGetSeconds(playerItem.duration);
+        } @catch (NSException *exception) {
+            NSLog(@"%@", exception);
         }
-        videoSlider.bufferProgress = maxBufferTime / CMTimeGetSeconds(playerItem.duration);
     }];
     
     // Observe play rate change (Show/hide info screen & sync play/pause button)
-    [self.KVOController observe:player keyPath:@"rate" options:NSKeyValueObservingOptionOld block:^(id  _Nullable observer, id  _Nonnull object, NSDictionary<NSString *,id> * _Nonnull change) {
-        
+    [self.KVOController observe:self.player keyPath:@"rate" options:NSKeyValueObservingOptionOld block:^(id  _Nullable observer, id  _Nonnull object, NSDictionary<NSString *,id> * _Nonnull change) {
         __strong NtvCustomVideoControlsView *strongSelf = weakSelf;
-        if (strongSelf) {
-            float oldRate = [[change objectForKey:NSKeyValueChangeOldKey] floatValue];
-            if (oldRate != player.rate) {
-                self.isVideoFinished = NO;
-                if (player.rate > 0 && strongSelf.isInfoScreenActive) {
-                    [strongSelf hideInfoScreen];
-                } else if (strongSelf.player.rate == 0) {
-                    if (self.seekSlider.value > 0.99f) {
-                        self.isVideoFinished = YES;
+        @try {
+            if (strongSelf) {
+                float oldRate = [[change objectForKey:NSKeyValueChangeOldKey] floatValue];
+                if (oldRate != strongSelf.player.rate) {
+                    strongSelf.isVideoFinished = NO;
+                    if (strongSelf.player.rate > 0 && strongSelf.isInfoScreenActive) {
+                        [strongSelf hideInfoScreen];
+                    } else if (strongSelf.player.rate == 0) {
+                        if (strongSelf.seekSlider.value > 0.99f) {
+                            strongSelf.isVideoFinished = YES;
+                        }
+                        [strongSelf showInfoScreen];
                     }
-                    [strongSelf showInfoScreen];
+                    [strongSelf syncPlayState];
                 }
-                [strongSelf syncPlayState];
             }
+        } @catch (NSException *exception) {
+            NSLog(@"%@", exception);
         }
     }];
     
@@ -202,56 +209,47 @@
     self.stalledToken = [[NSNotificationCenter defaultCenter] addObserverForName:AVPlayerItemPlaybackStalledNotification object:playerItem queue:nil usingBlock:^(NSNotification * _Nonnull note) {
         __strong NtvCustomVideoControlsView *strongSelf = weakSelf;
         if (strongSelf) {
-          [AppUtils setLoadingState:YES onView:strongSelf.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
+            if ([strongSelf.player respondsToSelector:@selector(automaticallyWaitsToMinimizeStalling)]) {
+                if (!strongSelf.player.automaticallyWaitsToMinimizeStalling) {
+                    playerRateBeforeSeek = 1; // This will automatically trigger video play once buffer is ready
+                }
+            }
         }
     }];
     
     [self.KVOController observe:playerItem keyPath:@"playbackBufferEmpty" options:NSKeyValueObservingOptionNew block:^(id  _Nullable observer, id  _Nonnull object, NSDictionary<NSString *,id> * _Nonnull change) {
-        
-        __strong NtvCustomVideoControlsView *strongSelf = weakSelf;
-        if (strongSelf) {
-            BOOL playbackBufferEmpty = [[change objectForKey:NSKeyValueChangeNewKey] boolValue];
-            if (playbackBufferEmpty) {
-                playerRateBeforeSeek = player.rate;
-                [AppUtils setLoadingState:YES onView:strongSelf.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
-            } else {
-                [AppUtils setLoadingState:NO onView:strongSelf.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
+        @try {
+            __strong NtvCustomVideoControlsView *strongSelf = weakSelf;
+            if (strongSelf) {
+                BOOL playbackBufferEmpty = [[change objectForKey:NSKeyValueChangeNewKey] boolValue];
+                if (playbackBufferEmpty) {
+                    playerRateBeforeSeek = strongSelf.player.rate;
+                }
             }
+        } @catch (NSException *exception) {
+            NSLog(@"%@", exception);
         }
     }];
     
-    // Undo buffering state
     [self.KVOController observe:playerItem keyPath:@"playbackLikelyToKeepUp" options:NSKeyValueObservingOptionNew block:^(id  _Nullable observer, id  _Nonnull object, NSDictionary<NSString *,id> * _Nonnull change) {
-        
         __strong NtvCustomVideoControlsView *strongSelf = weakSelf;
-        if (strongSelf) {
-            BOOL playbackLikelyToKeepUp = [[change objectForKey:NSKeyValueChangeNewKey] boolValue];
-            if (playbackLikelyToKeepUp) {
-                [AppUtils setLoadingState:NO onView:strongSelf.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
-                if (playerRateBeforeSeek > 0) {
-                    [player play];
+        @try {
+            if (strongSelf) {
+                if (playerItem.playbackLikelyToKeepUp && playerRateBeforeSeek > 0) {
+                    [strongSelf.player play];
                     playerRateBeforeSeek = 0;
                 }
-            } else {
+                [strongSelf syncPlayState];
             }
-        }
-    }];
-    
-    [self.KVOController observe:playerItem keyPath:@"playbackBufferFull" options:NSKeyValueObservingOptionNew block:^(id  _Nullable observer, id  _Nonnull object, NSDictionary<NSString *,id> * _Nonnull change) {
-        __strong NtvCustomVideoControlsView *strongSelf = weakSelf;
-        if (strongSelf) {
-            BOOL playbackBufferFull = [[change objectForKey:NSKeyValueChangeNewKey] boolValue];
-            if (playbackBufferFull) {
-                [AppUtils setLoadingState:NO onView:strongSelf.videoPlaceholderView style:UIActivityIndicatorViewStyleWhite];
-            } else {
-            }
+        } @catch (NSException *exception) {
+            NSLog(@"%@", exception);
         }
     }];
 }
 
 - (void)setPlayer:(AVPlayer *)player {
     _player = player;
-    
+
     // Add observer to update time labels
     __weak NtvCustomVideoControlsView *weakSelf = self;
     CMTime updateInterval = CMTimeMakeWithSeconds(1.0f, 10);
@@ -420,44 +418,61 @@
 
 
 - (IBAction)playPauseClick:(id)sender {
-    
     // Replay
     if (self.isVideoFinished) {
+        self.isVideoFinished = NO;
         [self.player seekToTime:CMTimeMakeWithSeconds(0, 100) completionHandler:^(BOOL finished) {}];
         [self.player play];
-        self.isVideoFinished = NO;
     } else if (self.player.rate > 0) {
         [self.player pause];
     } else {
         [self.player play];
     }
-    
     [self resetHideControlsTimer];
 }
 
 
 - (IBAction)collapseClick:(id)sender {
+    [self unobservePreviousPlayer];
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ntvcollapse" object:nil];
-    [self.KVOController unobserve:self.player.currentItem];
 }
 
 
 - (void)syncPlayState {
-    if (self.isVideoFinished) {
-        UIImage *replayImg = [UIImage imageNamed:@"replay" inBundle:nil compatibleWithTraitCollection:nil];
-        [self.playPauseBtn setImage:replayImg forState:UIControlStateNormal];
+    if (self.player && self.player.currentItem) {
+        if (self.isVideoFinished) {
+            // replay state
+            UIImage *replayImg = [UIImage imageNamed:@"replay"];
+            [self.playPauseBtn setImage:replayImg forState:UIControlStateNormal];
+        }
+        else if (self.player.rate > 0) {
+            // play state
+            UIImage *pauseImg = [UIImage imageNamed:@"pause"];
+            [self.playPauseBtn setImage:pauseImg forState:UIControlStateNormal];
+        }
+        else if (self.player.rate == 0) {
+            // pause state
+            UIImage *playImg = [UIImage imageNamed:@"play"];
+            [self.playPauseBtn setImage:playImg forState:UIControlStateNormal];
+        }
     }
-    else if (self.player.rate > 0) {
-        UIImage *pauseImg = [UIImage imageNamed:@"pause" inBundle:nil compatibleWithTraitCollection:nil];
-        [self.playPauseBtn setImage:pauseImg forState:UIControlStateNormal];
-    } else {
-        UIImage *playImg = [UIImage imageNamed:@"play" inBundle:nil compatibleWithTraitCollection:nil];
-        [self.playPauseBtn setImage:playImg forState:UIControlStateNormal];
-    }
+    
+    // Buffering state
+    [AppUtils setLoadingState:[self isBuffering] onView:self.videoPlaceholderView style:UIActivityIndicatorViewStyleWhiteLarge];
 }
 
-
-
+- (BOOL)isBuffering {
+    BOOL isBuffering;
+    if ([self.player respondsToSelector:@selector(automaticallyWaitsToMinimizeStalling)]) {
+        isBuffering = (!self.player || !self.player.currentItem)
+            || (!self.player.automaticallyWaitsToMinimizeStalling && self.player.rate == 0 && !self.player.currentItem.playbackLikelyToKeepUp)
+            || (self.player.automaticallyWaitsToMinimizeStalling && !self.player.currentItem.playbackLikelyToKeepUp);
+    } else {
+        isBuffering = (!self.player || !self.player.currentItem)
+            || (self.player.rate == 0 && !self.player.currentItem.playbackLikelyToKeepUp);
+    }
+    return isBuffering;
+}
 
 
 #pragma mark - Time Observing
@@ -477,32 +492,32 @@
 
 
 
-
 #pragma mark - Seeking
 
-- (IBAction)seekValueChanged:(NtvVideoSlider *)slider {
+- (IBAction)seekValueChanged:(VideoSlider *)slider {
     float videoDuration = CMTimeGetSeconds(self.player.currentItem.duration);
     float elapsedTime = videoDuration * self.seekSlider.value;
     [self updateTimeLabel:elapsedTime];
 }
 
-- (IBAction)seekStart:(NtvVideoSlider *)slider {
+- (IBAction)seekStart:(VideoSlider *)slider {
     [self resetHideControlsTimer];
     self.playerRateBeforeSeek = self.player.rate;
     [self.player pause];
 }
 
-- (IBAction)seekEnd:(NtvVideoSlider *)slider {
+- (IBAction)seekEnd:(VideoSlider *)slider {
     if (slider.value <= 0.99) {
         Float64 videoDuration = CMTimeGetSeconds(self.player.currentItem.duration);
         Float64 elapsedTime = videoDuration * slider.value;
         
+        __weak NtvCustomVideoControlsView *weakSelf = self;
         [self.player seekToTime:CMTimeMakeWithSeconds(elapsedTime, 100) completionHandler:^(BOOL finished) {
             // resume playing
-            if (self.playerRateBeforeSeek > 0) {
-                [self.player play];
+            if (weakSelf.playerRateBeforeSeek > 0) {
+                [weakSelf.player play];
             }
-            [self syncPlayState];
+            [weakSelf syncPlayState];
         }];
         
         [self updateTimeLabel:elapsedTime];
@@ -565,6 +580,5 @@
         }
     }
 }
-
 
 @end

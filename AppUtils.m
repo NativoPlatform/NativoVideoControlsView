@@ -1,6 +1,5 @@
 
 #import "AppUtils.h"
-#import "Masonry.h"
 
 @implementation AppUtils
 
@@ -20,34 +19,69 @@
                 spinner.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleBottomMargin | UIViewAutoresizingFlexibleRightMargin;
                 spinner.center = view.center;
             } else {
-                spinner.translatesAutoresizingMaskIntoConstraints = NO;
-                [view insertSubview:spinner atIndex:0];
-                [spinner mas_makeConstraints:^(MASConstraintMaker *make) {
-                    make.center.equalTo(view);
-                    make.width.mas_equalTo(spinner.frame.size.width);
-                    make.height.mas_equalTo(spinner.frame.size.height);
-                }];
+                [AppUtils setViewCenterAnchors:spinner equalToView:view];
+                [spinner.widthAnchor constraintEqualToConstant:spinner.frame.size.width].active = YES;
+                [spinner.heightAnchor constraintEqualToConstant:spinner.frame.size.height].active = YES;
             }
         }
-
         if (isLoading) {
             [spinner startAnimating];
         }
         else {
             [spinner stopAnimating];
-            
-            // Spinner stays hidden unless we do this, not sure why
             [spinner removeFromSuperview];
-            [view insertSubview:spinner atIndex:0];
+            [view addSubview:spinner];
             if (!spinner.translatesAutoresizingMaskIntoConstraints) {
-                [spinner mas_remakeConstraints:^(MASConstraintMaker *make) {
-                    make.center.equalTo(view);
-                    make.width.mas_equalTo(spinner.frame.size.width);
-                    make.height.mas_equalTo(spinner.frame.size.height);
-                }];
+                [AppUtils removeViewConstraints:spinner];
+                [AppUtils setViewCenterAnchors:spinner equalToView:view];
+                [spinner.widthAnchor constraintEqualToConstant:spinner.frame.size.width].active = YES;
+                [spinner.heightAnchor constraintEqualToConstant:spinner.frame.size.height].active = YES;
             }
         }
     });
+}
+
++ (void)setViewAnchors:(UIView *)innerView equalToView:(UIView *)outerView {
+    innerView.translatesAutoresizingMaskIntoConstraints = NO;
+    [innerView.leftAnchor constraintEqualToAnchor:outerView.leftAnchor].active = YES;
+    [innerView.rightAnchor constraintEqualToAnchor:outerView.rightAnchor].active = YES;
+    [innerView.topAnchor constraintEqualToAnchor:outerView.topAnchor].active = YES;
+    [innerView.bottomAnchor constraintEqualToAnchor:outerView.bottomAnchor].active = YES;
+}
+
++ (void)setViewAnchors:(UIView *)innerView equalToView:(UIView *)outerView withInsets:(UIEdgeInsets)insets {
+    innerView.translatesAutoresizingMaskIntoConstraints = NO;
+    [innerView.leftAnchor constraintEqualToAnchor:outerView.leftAnchor constant:insets.left].active = YES;
+    [innerView.rightAnchor constraintEqualToAnchor:outerView.rightAnchor constant:insets.right].active = YES;
+    [innerView.topAnchor constraintEqualToAnchor:outerView.topAnchor constant:insets.top].active = YES;
+    [innerView.bottomAnchor constraintEqualToAnchor:outerView.bottomAnchor constant:insets.bottom].active = YES;
+}
+
++ (void)setViewCenterAnchors:(UIView *)innerView equalToView:(UIView *)outerView {
+    innerView.translatesAutoresizingMaskIntoConstraints = NO;
+    [innerView.centerXAnchor constraintEqualToAnchor:outerView.centerXAnchor].active = YES;
+    [innerView.centerYAnchor constraintEqualToAnchor:outerView.centerYAnchor].active = YES;
+}
+
++ (void)removeViewConstraints:(UIView *)view {
+    @try {
+        // Remove contraints to superview
+        if (view.superview) {
+            [view.superview.constraints enumerateObjectsUsingBlock:^(__kindof NSLayoutConstraint * _Nonnull constraint, NSUInteger idx, BOOL * _Nonnull stop) {
+                if (constraint.firstItem == view || constraint.secondItem == view) {
+                    [view.superview removeConstraint:constraint];
+                }
+            }];
+        }
+        // Remove height & width constraints
+        [view.constraints enumerateObjectsUsingBlock:^(__kindof NSLayoutConstraint * _Nonnull constraint, NSUInteger idx, BOOL * _Nonnull stop) {
+            if ((constraint.firstAttribute == NSLayoutAttributeWidth && constraint.secondAttribute == NSLayoutAttributeNotAnAttribute) || (constraint.firstAttribute == NSLayoutAttributeHeight && constraint.secondAttribute == NSLayoutAttributeNotAnAttribute)) {
+                [view removeConstraint:constraint];
+            }
+        }];
+    } @catch (NSException *exception) {
+        NSLog(@"%@", exception);
+    }
 }
 
 @end
