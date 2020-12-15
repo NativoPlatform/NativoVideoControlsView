@@ -37,12 +37,13 @@
     [self insertSubview:self.bufferProgressView atIndex:0];
     
     // Edit thumb and track
-    UIImage *thumb = [UIImage imageNamed:@"sliderThumb" inBundle:nil compatibleWithTraitCollection:nil];
+    NSBundle *bundle = [NSBundle bundleForClass:[VideoSlider class]];
+    UIImage *thumb = [UIImage imageNamed:@"sliderThumb" inBundle:bundle compatibleWithTraitCollection:nil];
     [self setThumbImage:thumb forState:UIControlStateNormal];
     [self setThumbImage:thumb forState:UIControlStateHighlighted];
     [self setThumbImage:thumb forState:UIControlStateFocused];
     
-    UIImage *track = [UIImage imageNamed:@"sliderTrack" inBundle:nil compatibleWithTraitCollection:nil];
+    UIImage *track = [UIImage imageNamed:@"sliderTrack" inBundle:bundle compatibleWithTraitCollection:nil];
     track = [track resizableImageWithCapInsets:UIEdgeInsetsZero];
     [self setMinimumTrackImage:track forState:UIControlStateNormal];
     [self setMinimumTrackImage:track forState:UIControlStateHighlighted];

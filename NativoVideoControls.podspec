@@ -1,7 +1,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'NativoVideoControls'
-  s.version          = '5.3.0'
+  s.version          = '5.3.1'
   s.summary          = 'Video controls used by the NativoSDK. You can use this as a starting point to customize the video player for your app.'
   s.description      = 'Full screen video controls used by the NativoSDK. You can use this as a starting point to customize the video player for your app.'
   s.homepage         = 'https://github.com/NativoPlatform/NativoVideoControlsView'

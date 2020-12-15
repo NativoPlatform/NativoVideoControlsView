@@ -24,11 +24,13 @@
 
 @implementation NtvCustomVideoControlsView
 
+static NSBundle *bundle;
 
 #pragma mark - Setup
 
 - (instancetype)initWithCoder:(NSCoder *)aDecoder {
     self = [super initWithCoder:aDecoder];
+    bundle = [NSBundle bundleForClass:[NtvCustomVideoControlsView class]];
     return self;
 }
 
@@ -95,6 +97,20 @@
 - (void)didLoadNewPlayerItem:(AVPlayerItem *)playerItem {
     @try {
         // Reset UI
+        if (self.videoPlaceholderView.subviews.count > 0) {
+            AVPlayerLayer *avLayer;
+            UIView *videoView = self.videoPlaceholderView.subviews[0];
+            for (CALayer *layer in videoView.layer.sublayers) {
+                if ([layer isKindOfClass:[AVPlayerLayer class]]) {
+                    avLayer = (AVPlayerLayer *)layer;
+                    break;
+                }
+            }
+            if (avLayer) {
+                avLayer.frame = self.videoContainer.bounds;
+            }
+        }
+        
         self.isVideoFinished = NO;
         if (!CMTIME_IS_VALID(playerItem.currentTime) || CMTimeCompare(playerItem.currentTime, kCMTimeZero) == 0 ) {
             [self updateTimeLabel:0];
@@ -128,6 +144,7 @@
     }
     [self.KVOController unobserveAll];
     [[NSNotificationCenter defaultCenter] removeObserver:self.stalledToken];
+    self.player = nil;
 }
 
 - (void)observePlayerState:(AVPlayerItem *)playerItem {
@@ -442,17 +459,17 @@
     if (self.player && self.player.currentItem) {
         if (self.isVideoFinished) {
             // replay state
-            UIImage *replayImg = [UIImage imageNamed:@"replay"];
+            UIImage *replayImg = [UIImage imageNamed:@"replay" inBundle:bundle compatibleWithTraitCollection:nil];
             [self.playPauseBtn setImage:replayImg forState:UIControlStateNormal];
         }
         else if (self.player.rate > 0) {
             // play state
-            UIImage *pauseImg = [UIImage imageNamed:@"pause"];
+            UIImage *pauseImg = [UIImage imageNamed:@"pause" inBundle:bundle compatibleWithTraitCollection:nil];
             [self.playPauseBtn setImage:pauseImg forState:UIControlStateNormal];
         }
         else if (self.player.rate == 0) {
             // pause state
-            UIImage *playImg = [UIImage imageNamed:@"play"];
+            UIImage *playImg = [UIImage imageNamed:@"play" inBundle:bundle compatibleWithTraitCollection:nil];
             [self.playPauseBtn setImage:playImg forState:UIControlStateNormal];
         }
     }
